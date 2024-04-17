@@ -20,6 +20,8 @@ from ema_pytorch import EMA
 
 from tqdm.auto import tqdm
 
+import wandb
+
 from denoising_diffusion_pytorch.version import __version__
 
 # constants
@@ -836,6 +838,7 @@ class Trainer1D(object):
         with tqdm(initial = self.step, total = self.train_num_steps, disable = not accelerator.is_main_process) as pbar:
 
             while self.step < self.train_num_steps:
+                wandb.log({'Step': self.step})
 
                 total_loss = 0.
 
@@ -850,6 +853,7 @@ class Trainer1D(object):
                     self.accelerator.backward(loss)
 
                 pbar.set_description(f'loss: {total_loss:.4f}')
+                wandb.log({'Training Loss': total_loss})
 
                 accelerator.wait_for_everyone()
                 accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
