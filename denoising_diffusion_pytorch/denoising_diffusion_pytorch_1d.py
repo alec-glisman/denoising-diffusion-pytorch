@@ -22,6 +22,8 @@ from tqdm.auto import tqdm
 
 import wandb
 
+import numpy as np
+
 from denoising_diffusion_pytorch.version import __version__
 
 # constants
@@ -591,7 +593,7 @@ class GaussianDiffusion1D(nn.Module):
 
         x_start = None
 
-        for t in tqdm(reversed(range(0, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_timesteps):
+        for t in tqdm(reversed(range(0, self.num_timesteps)), desc = 'sampling loop time step', total = self.num_timesteps, dynamic_ncols=True, leave=False):
             self_cond = x_start if self.self_condition else None
             img, x_start = self.p_sample(img, t, self_cond)
 
@@ -875,11 +877,29 @@ class Trainer1D(object):
                             batches = num_to_groups(self.num_samples, self.batch_size)
                             all_samples_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
 
-                        all_samples = torch.cat(all_samples_list, dim = 0)
-
-                        torch.save(all_samples, str(self.results_folder / f'sample-{milestone}.png'))
+                        all_samples = torch.cat(all_samples_list, dim = 0).cpu().numpy()
+                        np.savez(str(self.results_folder / f'sample-{milestone}.npz'), samples = all_samples)
                         self.save(milestone)
 
                 pbar.update(1)
 
         accelerator.print('training complete')
+        
+    def test(self, dataset: Dataset) -> float:
+        device = self.device
+        dl = DataLoader(dataset, batch_size = self.batch_size, pin_memory = True, num_workers = cpu_count())
+        dl = self.accelerator.prepare(dl)
+
+        self.model.eval()
+        self.ema.ema_model.eval()
+        total_loss = 0.
+        
+        with torch.no_grad():
+            for data in dl:
+                data = data.to(device)
+                with self.accelerator.autocast():
+                    loss = self.model(data)
+                    total_loss += loss.item()
+                    
+        wandb.log({'Test Loss': total_loss})
+        return total_loss / len(dl)
