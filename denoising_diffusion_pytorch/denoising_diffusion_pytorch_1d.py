@@ -74,16 +74,22 @@ def unnormalize_to_zero_to_one(t):
 
 # data
 
+
 class Dataset1D(Dataset):
-    def __init__(self, tensor: Tensor):
+    def __init__(self, data: torch.Tensor, weights: torch.Tensor = None):
         super().__init__()
-        self.tensor = tensor.clone()
+        self.data = data.clone()
+        if exists(weights):
+            self.weights = weights.clone()
+        else:
+            self.weights = torch.ones(len(data))
 
     def __len__(self):
-        return len(self.tensor)
+        return len(self.data)
 
     def __getitem__(self, idx):
-        return self.tensor[idx].clone()
+        return (self.data[idx].clone(), self.weights[idx].clone())
+
 
 # small helper modules
 
@@ -671,7 +677,7 @@ class GaussianDiffusion1D(nn.Module):
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
-    def p_losses(self, x_start, t, noise = None):
+    def p_losses(self, x_start, t, weights, noise = None):
         b, c, n = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
 
@@ -707,15 +713,15 @@ class GaussianDiffusion1D(nn.Module):
         loss = reduce(loss, 'b ... -> b', 'mean')
 
         loss = loss * extract(self.loss_weight, t, loss.shape)
-        return loss.mean()
+        return (loss * weights).mean()
 
-    def forward(self, img, *args, **kwargs):
+    def forward(self, img, weights, *args, **kwargs):
         b, c, n, device, seq_length, = *img.shape, img.device, self.seq_length
         assert n == seq_length, f'seq length must be {seq_length}'
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
 
         img = self.normalize(img)
-        return self.p_losses(img, t, *args, **kwargs)
+        return self.p_losses(img, t, weights, *args, **kwargs)
 
 # trainer class
 
@@ -845,10 +851,13 @@ class Trainer1D(object):
                 total_loss = 0.
 
                 for _ in range(self.gradient_accumulate_every):
-                    data = next(self.dl).to(device)
+                    data = next(self.dl)
+                    inputs, weights = data
+                    inputs = inputs.to(device)
+                    weights = weights.to(device)
 
                     with self.accelerator.autocast():
-                        loss = self.model(data)
+                        loss = self.model(inputs, weights)
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
 
@@ -890,15 +899,16 @@ class Trainer1D(object):
         dl = DataLoader(dataset, batch_size = self.batch_size, pin_memory = True, num_workers = cpu_count())
         dl = self.accelerator.prepare(dl)
 
-        self.model.eval()
-        self.ema.ema_model.eval()
         total_loss = 0.
-        
+        self.ema.ema_model.eval()
         with torch.no_grad():
             for data in dl:
-                data = data.to(device)
+                inputs, weights = data
+                inputs = inputs.to(device)
+                weights = weights.to(device)
+                
                 with self.accelerator.autocast():
-                    loss = self.model(data)
+                    loss = self.model(inputs, weights)
                     total_loss += loss.item()
                     
         wandb.log({'Test Loss': total_loss})
