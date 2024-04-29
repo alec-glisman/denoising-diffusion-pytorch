@@ -865,6 +865,7 @@ class Trainer1D(object):
 
                 pbar.set_description(f'loss: {total_loss:.4f}')
                 wandb.log({'Training Loss': total_loss})
+                wandb.log({'Log Training Loss': math.log(total_loss)})
 
                 accelerator.wait_for_everyone()
                 accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
