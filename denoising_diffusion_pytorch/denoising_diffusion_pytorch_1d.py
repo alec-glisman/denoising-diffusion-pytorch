@@ -618,7 +618,7 @@ class GaussianDiffusion1D(nn.Module):
 
         x_start = None
 
-        for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step'):
+        for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step', total = len(time_pairs), dynamic_ncols=True, leave=False):
             time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
             self_cond = x_start if self.self_condition else None
             pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = clip_denoised)
@@ -662,7 +662,7 @@ class GaussianDiffusion1D(nn.Module):
 
         x_start = None
 
-        for i in tqdm(reversed(range(0, t)), desc = 'interpolation sample time step', total = t):
+        for i in tqdm(reversed(range(0, t)), desc = 'interpolation sample time step', total = t, dynamic_ncols=True, leave=False):
             self_cond = x_start if self.self_condition else None
             img, x_start = self.p_sample(img, i, self_cond)
 
@@ -843,7 +843,7 @@ class Trainer1D(object):
         accelerator = self.accelerator
         device = accelerator.device
 
-        with tqdm(initial = self.step, total = self.train_num_steps, disable = not accelerator.is_main_process) as pbar:
+        with tqdm(initial = self.step, total = self.train_num_steps, disable = not accelerator.is_main_process, dynamic_ncols=True) as pbar:
 
             while self.step < self.train_num_steps:
                 wandb.log({'Step': self.step})
