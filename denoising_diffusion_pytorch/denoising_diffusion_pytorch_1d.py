@@ -3,7 +3,8 @@ from pathlib import Path
 from random import random
 from functools import partial
 from collections import namedtuple
-from multiprocessing import cpu_count
+import multiprocessing
+import os
 
 import torch
 from torch import nn, einsum, Tensor
@@ -31,6 +32,12 @@ from denoising_diffusion_pytorch.version import __version__
 ModelPrediction =  namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
 
 # helpers functions
+
+def cpu_count():
+    slurm_var = "SLURM_JOB_CPUS_PER_NODE"
+    if slurm_var in os.environ:
+        return int(os.environ[slurm_var])
+    return multiprocessing.cpu_count()
 
 def exists(x):
     return x is not None
