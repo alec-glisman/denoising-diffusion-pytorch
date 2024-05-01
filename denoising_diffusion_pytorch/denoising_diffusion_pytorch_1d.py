@@ -756,10 +756,12 @@ class Trainer1D(object):
         super().__init__()
 
         # accelerator
+        
+        mixed_precision = mixed_precision_type if amp else 'no'
 
         self.accelerator = Accelerator(
             split_batches = split_batches,
-            mixed_precision = mixed_precision_type if amp else 'no'
+            mixed_precision = mixed_precision,
         )
 
         # model
@@ -895,7 +897,13 @@ class Trainer1D(object):
                             all_samples_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n), batches))
 
                         all_samples = torch.cat(all_samples_list, dim = 0).cpu().numpy()
+
                         np.savez(str(self.results_folder / f'sample-{milestone}.npz'), samples = all_samples)
+                        
+                        for i in range(self.num_samples):
+                            arr = all_samples[i, :, :].T
+                            np.savetxt(str(self.results_folder / f'sample-{milestone}_{i}.csv'), arr, delimiter = ',', fmt = '%.3f')
+                        
                         self.save(milestone)
 
                 pbar.update(1)
